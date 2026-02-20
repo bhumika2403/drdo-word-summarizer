@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>DRDO — Word Summarizer System</title>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Source+Serif+4:ital,wght@0,300;0,400;0,600;1,300&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --navy:       #0a1628;
+      --navy2:      #0d1f3c;
+      --navy3:      #152a4e;
+      --gold:       #c8922a;
+      --gold2:      #e8a830;
+      --gold-light: #f5c86a;
+      --white:      #f0eee8;
+      --muted:      #8899bb;
+      --border:     rgba(200,146,42,0.25);
+      --success:    #2ec4a0;
+      --danger:     #e05252;
+      --card:       rgba(13,31,60,0.85);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Source Serif 4', Georgia, serif;
+      background-color: var(--navy); color: var(--white);
+      min-height: 100vh; position: relative; overflow-x: hidden;
+    }
+    body::before {
+      content: ''; position: fixed; inset: 0;
+      background-image:
+        repeating-linear-gradient(0deg,transparent,transparent 60px,rgba(200,146,42,0.03) 60px,rgba(200,146,42,0.03) 61px),
+        repeating-linear-gradient(90deg,transparent,transparent 60px,rgba(200,146,42,0.03) 60px,rgba(200,146,42,0.03) 61px);
+      pointer-events: none; z-index: 0;
+    }
+    body::after {
+      content: ''; position: fixed; top: -200px; right: -200px;
+      width: 600px; height: 600px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(200,146,42,0.08) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    .page-wrapper { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 0 24px 60px; }
+
+    /* HEADER */
+    header { display: flex; align-items: center; justify-content: space-between; padding: 24px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 40px; }
+    .header-left { display: flex; align-items: center; gap: 20px; }
+    .drdo-logo-wrap svg { width: 80px; height: 80px; }
+    .header-text h1 { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 1.7rem; letter-spacing: 0.06em; color: var(--gold2); text-transform: uppercase; line-height: 1.15; }
+    .header-text .subtitle { font-family: 'Rajdhani', sans-serif; font-size: 0.78rem; letter-spacing: 0.18em; color: var(--muted); text-transform: uppercase; margin-top: 3px; }
+    .header-badge { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+    .badge-pill { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 3px 10px; border-radius: 2px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500; }
+    .badge-offline  { background: rgba(46,196,160,0.15); color: var(--success); border: 1px solid rgba(46,196,160,0.3); }
+    .badge-classified { background: rgba(200,146,42,0.12); color: var(--gold); border: 1px solid rgba(200,146,42,0.3); }
+
+    /* GRID */
+    .main-grid { display: grid; grid-template-columns: 360px 1fr; gap: 24px; align-items: start; }
+
+    /* CARD */
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 24px; backdrop-filter: blur(12px); position: relative; overflow: hidden; }
+    .card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--gold), var(--gold2), transparent); }
+    .card-title { font-family: 'Rajdhani', sans-serif; font-weight: 600; font-size: 0.7rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); margin-bottom: 18px; display: flex; align-items: center; gap: 8px; }
+    .card-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+    /* UPLOAD */
+    .upload-zone { border: 1.5px dashed rgba(200,146,42,0.35); border-radius: 3px; padding: 26px 16px; text-align: center; cursor: pointer; transition: all 0.2s; position: relative; }
+    .upload-zone:hover, .upload-zone.drag-over { border-color: var(--gold2); background: rgba(200,146,42,0.05); }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .upload-zone p { font-size: 0.82rem; color: var(--muted); line-height: 1.6; }
+    .upload-zone strong { color: var(--gold2); }
+    .upload-types { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--muted); margin-top: 7px; }
+    .file-loaded { background: rgba(46,196,160,0.06); border: 1px solid rgba(46,196,160,0.3); padding: 11px 13px; border-radius: 3px; display: none; align-items: center; gap: 11px; margin-top: 13px; }
+    .file-loaded.visible { display: flex; }
+    .file-loaded-name { font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: var(--success); word-break: break-all; }
+    .file-loaded-stats { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+    .btn-clear { margin-left: auto; background: none; border: 1px solid rgba(224,82,82,0.3); color: var(--danger); font-family: 'Rajdhani', sans-serif; font-size: 0.68rem; padding: 4px 8px; border-radius: 2px; cursor: pointer; flex-shrink: 0; text-transform: uppercase; transition: all 0.2s; }
+    .btn-clear:hover { background: rgba(224,82,82,0.1); }
+
+    /* SEARCH */
+    .search-row { display: flex; gap: 8px; }
+    .search-input { flex: 1; background: rgba(10,22,40,0.8); border: 1px solid var(--border); color: var(--white); font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; padding: 10px 12px; border-radius: 3px; outline: none; transition: border-color 0.2s; }
+    .search-input:focus { border-color: var(--gold2); }
+    .search-input::placeholder { color: var(--muted); font-style: italic; }
+    .search-input:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-search { background: linear-gradient(135deg, var(--gold), var(--gold2)); color: var(--navy); border: none; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase; padding: 10px 15px; border-radius: 3px; cursor: pointer; white-space: nowrap; transition: opacity 0.2s; }
+    .btn-search:hover { opacity: 0.9; }
+    .btn-search:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ACTION BUTTONS */
+    .btn-full { width: 100%; border-radius: 3px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 0.82rem; letter-spacing: 0.14em; text-transform: uppercase; padding: 11px 16px; transition: all 0.2s; }
+    .btn-full:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-summarize { background: linear-gradient(135deg, var(--navy3), #1e3a6e); color: var(--gold2); border: 1px solid var(--border); }
+    .btn-summarize:hover:not(:disabled) { border-color: var(--gold2); }
+    .btn-visualize { background: linear-gradient(135deg, #0e2a1a, #1a3a2a); color: var(--success); border: 1px solid rgba(46,196,160,0.3); margin-top: 10px; }
+    .btn-visualize:hover:not(:disabled) { border-color: var(--success); }
+
+    /* RESULT PANEL */
+    .result-panel { min-height: 420px; display: flex; flex-direction: column; }
+    .result-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 14px; color: var(--muted); opacity: 0.5; text-align: center; padding: 40px; }
+    .result-empty p { font-size: 0.85rem; line-height: 1.6; font-style: italic; }
+    .loader { display: none; align-items: center; justify-content: center; gap: 12px; padding: 40px; color: var(--muted); font-size: 0.85rem; font-style: italic; }
+    .spinner { width: 20px; height: 20px; border: 2px solid rgba(200,146,42,0.2); border-top-color: var(--gold2); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .result-not-found { display: none; flex-direction: column; gap: 14px; }
+    .not-found-header { display: flex; align-items: center; gap: 12px; padding: 13px 15px; background: rgba(224,82,82,0.08); border: 1px solid rgba(224,82,82,0.25); border-radius: 3px; }
+    .not-found-header .icon { font-size: 1.4rem; }
+    .not-found-header h3 { font-family: 'Rajdhani', sans-serif; font-size: 0.92rem; font-weight: 600; color: var(--danger); text-transform: uppercase; letter-spacing: 0.08em; }
+    .not-found-header p { font-size: 0.76rem; color: var(--muted); margin-top: 2px; }
+    .result-found { display: none; flex-direction: column; gap: 15px; }
+    .result-word-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 13px; flex-wrap: wrap; }
+    .result-word-title { font-family: 'Rajdhani', sans-serif; font-size: 2rem; font-weight: 700; color: var(--gold2); letter-spacing: 0.04em; line-height: 1; }
+    .result-word-sub { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; color: var(--muted); margin-top: 4px; text-transform: uppercase; }
+    .result-stats { display: flex; gap: 9px; flex-shrink: 0; }
+    .stat-chip { text-align: center; background: rgba(200,146,42,0.1); border: 1px solid var(--border); padding: 7px 11px; border-radius: 3px; }
+    .stat-chip .num { font-family: 'Rajdhani', sans-serif; font-weight: 700; font-size: 1.4rem; color: var(--gold2); line-height: 1; }
+    .stat-chip .lbl { font-family: 'JetBrains Mono', monospace; font-size: 0.57rem; color: var(--muted); text-transform: uppercase; margin-top: 2px; }
+    .divider { height: 1px; background: var(--border); }
+    .context-label { font-family: 'Rajdhani', sans-serif; font-size: 0.63rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold); margin-bottom: 9px; }
+    .primary-context { background: rgba(200,146,42,0.06); border-left: 3px solid var(--gold2); padding: 12px 14px; border-radius: 0 3px 3px 0; font-size: 0.9rem; line-height: 1.75; color: var(--white); }
+    .supporting-list { display: flex; flex-direction: column; gap: 8px; }
+    .supporting-item { background: rgba(13,31,60,0.5); border: 1px solid rgba(200,146,42,0.12); border-radius: 3px; padding: 10px 12px 10px 26px; font-size: 0.82rem; line-height: 1.65; color: #c0cce0; position: relative; }
+    .supporting-item::before { content: attr(data-index); position: absolute; left: 9px; top: 11px; font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; color: var(--muted); }
+    .hl { background: rgba(232,168,48,0.25); color: var(--gold-light); padding: 0 2px; border-radius: 2px; font-weight: 600; }
+    .result-summary { flex-direction: column; gap: 15px; }
+    .topic-chip { font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; padding: 4px 9px; border-radius: 2px; background: rgba(200,146,42,0.1); border: 1px solid rgba(200,146,42,0.25); color: var(--gold-light); }
+    .summary-item { background: rgba(13,31,60,0.5); border: 1px solid rgba(200,146,42,0.12); border-radius: 3px; padding: 11px 14px 11px 32px; font-size: 0.86rem; line-height: 1.7; color: #c0cce0; position: relative; }
+    .summary-item::before { content: attr(data-index); position: absolute; left: 10px; top: 12px; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--gold); font-weight: 600; }
+    .error-banner { display: none; background: rgba(224,82,82,0.1); border: 1px solid rgba(224,82,82,0.3); color: var(--danger); font-size: 0.79rem; padding: 8px 12px; border-radius: 3px; margin-top: 10px; }
+    .error-banner.visible { display: block; }
+
+    /* ── VISUALIZATIONS ── */
+    .viz-section { display: none; margin-top: 24px; flex-direction: column; gap: 20px; }
+    .viz-section.visible { display: flex; }
+    .viz-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .viz-card { background: var(--card); border: 1px solid rgba(46,196,160,0.2); border-radius: 4px; padding: 20px; position: relative; overflow: hidden; }
+    .viz-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, #2ec4a0, #7b9ef0, transparent); }
+    .viz-card-title { font-family: 'Rajdhani', sans-serif; font-size: 0.65rem; font-weight: 600; letter-spacing: 0.2em; text-transform: uppercase; color: #2ec4a0; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+    .viz-card-title::after { content: ''; flex: 1; height: 1px; background: rgba(46,196,160,0.2); }
+    canvas { display: block; width: 100% !important; }
+    .donut-wrap { display: flex; align-items: center; gap: 20px; }
+    .donut-legend { display: flex; flex-direction: column; gap: 9px; flex-shrink: 0; }
+    .legend-item { display: flex; align-items: center; gap: 8px; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .position-map-label { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--muted); display: flex; justify-content: space-between; margin-top: 5px; }
+
+    /* FOOTER */
+    footer { margin-top: 50px; padding-top: 18px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    footer p { font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; color: var(--muted); letter-spacing: 0.06em; }
+
+    @media (max-width: 780px) {
+      .main-grid { grid-template-columns: 1fr; }
+      .viz-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="page-wrapper">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <div class="drdo-logo-wrap">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="50" cy="50" r="48" fill="#0a1628" stroke="#c8922a" stroke-width="2.5"/>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#c8922a" stroke-width="1" stroke-dasharray="3,2"/>
+          <g transform="translate(50,50) rotate(-45)">
+            <rect x="-4" y="-22" width="8" height="32" rx="2" fill="#c8922a"/>
+            <polygon points="0,-30 -4,-22 4,-22" fill="#e8a830"/>
+            <polygon points="-4,10 -12,22 -4,18" fill="#c8922a"/>
+            <polygon points="4,10 12,22 4,18" fill="#c8922a"/>
+            <ellipse cx="0" cy="14" rx="3" ry="2" fill="#ff6600" opacity="0.8"/>
+          </g>
+          <text font-family="'Rajdhani', sans-serif" font-size="7.5" font-weight="700" fill="#c8922a" letter-spacing="1.5" text-anchor="middle">
+            <textPath href="#topArc" startOffset="50%">DRDO • INDIA</textPath>
+          </text>
+          <text font-family="'Rajdhani', sans-serif" font-size="6" font-weight="600" fill="#e8a830" letter-spacing="0.5" text-anchor="middle">
+            <textPath href="#bottomArc" startOffset="50%">DEFENCE RESEARCH &amp; DEVELOPMENT</textPath>
+          </text>
+          <defs>
+            <path id="topArc" d="M 10,50 A 40,40 0 0,1 90,50"/>
+            <path id="bottomArc" d="M 8,56 A 43,43 0 0,0 92,56"/>
+          </defs>
+          <circle cx="22" cy="50" r="1.5" fill="#e8a830"/>
+          <circle cx="78" cy="50" r="1.5" fill="#e8a830"/>
+        </svg>
+      </div>
+      <div class="header-text">
+        <h1>Word Summarizer<br>System</h1>
+        <div class="subtitle">Document Intelligence Terminal · v1.0</div>
+      </div>
+    </div>
+    <div class="header-badge">
+      <span class="badge-pill badge-offline">⬤ Offline Mode</span>
+      <span class="badge-pill badge-classified">For Official Use</span>
+    </div>
+  </header>
+
+  <!-- MAIN GRID -->
+  <div class="main-grid">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex; flex-direction:column; gap:18px;">
+
+      <!-- Upload -->
+      <div class="card">
+        <div class="card-title">Document Upload</div>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="fileInput" accept=".pdf,.docx,.txt"/>
+          <div style="margin-bottom:10px;">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#c8922a" stroke-width="1.5" stroke-linecap="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <p>Drag &amp; drop or <strong>click to browse</strong></p>
+          <div class="upload-types">PDF · DOCX · TXT &nbsp;|&nbsp; max 50 MB</div>
+        </div>
+        <div class="error-banner" id="uploadError"></div>
+        <div class="file-loaded" id="fileLoaded">
+          <div style="font-size:1.4rem;">📄</div>
+          <div>
+            <div class="file-loaded-name" id="loadedName">—</div>
+            <div class="file-loaded-stats" id="loadedStats">—</div>
+          </div>
+          <button class="btn-clear" id="clearBtn">✕ Clear</button>
+        </div>
+      </div>
+
+      <!-- Search -->
+      <div class="card">
+        <div class="card-title">Word Search</div>
+        <div class="search-row">
+          <input type="text" class="search-input" id="searchInput" placeholder="Enter keyword…" disabled autocomplete="off" spellcheck="false"/>
+          <button class="btn-search" id="searchBtn" disabled>Search</button>
+        </div>
+        <div class="error-banner" id="searchError"></div>
+        <div style="margin-top:11px; font-size:0.73rem; color:var(--muted); line-height:1.6; font-style:italic;">
+          Search any keyword to extract its contextual meaning from the document.
+        </div>
+      </div>
+
+      <!-- Summary + Visualize combined card -->
+      <div class="card">
+        <div class="card-title">Document Actions</div>
+        <p style="font-size:0.76rem; color:var(--muted); line-height:1.6; margin-bottom:13px;">
+          Generate a full document summary or visualise keyword frequencies and distributions as interactive charts.
+        </p>
+        <button class="btn-full btn-summarize" id="summarizeBtn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/>
+            <line x1="21" y1="14" x2="3" y2="14"/><line x1="21" y1="18" x2="10" y2="18"/>
+          </svg>
+          Generate Summary
+        </button>
+        <button class="btn-full btn-visualize" id="visualizeBtn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="18" y1="20" x2="18" y2="10"/>
+            <line x1="12" y1="20" x2="12" y2="4"/>
+            <line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          Generate Charts
+        </button>
+        <div class="error-banner" id="summarizeError"></div>
+        <div class="error-banner" id="visualizeError"></div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: Result Panel -->
+    <div class="card result-panel">
+      <div class="card-title">Analysis Result</div>
+
+      <!-- Empty -->
+      <div class="result-empty" id="resultEmpty">
+        <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+        <p>Upload a document then search a keyword,<br>generate a summary, or view charts below.</p>
+      </div>
+
+      <!-- Loader -->
+      <div class="loader" id="loader">
+        <div class="spinner"></div>
+        <span>Processing…</span>
+      </div>
+
+      <!-- Not Found -->
+      <div class="result-not-found" id="resultNotFound">
+        <div class="not-found-header">
+          <div class="icon">🔍</div>
+          <div>
+            <h3>Word Not Present</h3>
+            <p id="notFoundMsg">—</p>
+          </div>
+        </div>
+        <div style="font-size:0.8rem; color:var(--muted); line-height:1.7;">
+          The keyword does not appear in the loaded document. Try a different word or check spelling.
+        </div>
+      </div>
+
+      <!-- Found -->
+      <div class="result-found" id="resultFound">
+        <div class="result-word-header">
+          <div>
+            <div class="result-word-title" id="resultWord">—</div>
+            <div class="result-word-sub">extracted from document</div>
+          </div>
+          <div class="result-stats">
+            <div class="stat-chip"><div class="num" id="statFreq">0</div><div class="lbl">Occurrences</div></div>
+            <div class="stat-chip"><div class="num" id="statSentences">0</div><div class="lbl">Contexts</div></div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div class="context-label">⬛ Primary Context</div>
+          <div class="primary-context" id="primaryContext">—</div>
+        </div>
+        <div id="supportingSection" style="display:none;">
+          <div class="context-label">⬜ Supporting Contexts</div>
+          <div class="supporting-list" id="supportingList"></div>
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div class="result-summary" id="resultSummary" style="display:none; flex-direction:column; gap:15px;">
+        <div class="result-word-header">
+          <div>
+            <div class="result-word-title" style="font-size:1.4rem;">Document Summary</div>
+            <div class="result-word-sub" id="summaryCompression">—</div>
+          </div>
+          <div class="result-stats">
+            <div class="stat-chip"><div class="num" id="summaryWordCount">0</div><div class="lbl">Words</div></div>
+            <div class="stat-chip"><div class="num" id="summarySentCount">0</div><div class="lbl">Sentences</div></div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div class="context-label">⬛ Key Topics</div>
+          <div id="keyTopicsWrap" style="display:flex; flex-wrap:wrap; gap:6px;"></div>
+        </div>
+        <div class="divider"></div>
+        <div>
+          <div class="context-label">⬜ Extracted Summary</div>
+          <div id="summaryList" style="display:flex; flex-direction:column; gap:9px;"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ════ VISUALIZATIONS (full-width below grid) ════ -->
+  <div class="viz-section" id="vizSection">
+
+    <!-- Row 1 -->
+    <div class="viz-grid">
+      <div class="viz-card">
+        <div class="viz-card-title">Top Keywords · Frequency</div>
+        <canvas id="chartKeywords" height="260"></canvas>
+      </div>
+      <div class="viz-card">
+        <div class="viz-card-title">Sentence Length · Distribution</div>
+        <canvas id="chartSentLengths" height="260"></canvas>
+      </div>
+    </div>
+
+    <!-- Row 2 -->
+    <div class="viz-grid">
+      <div class="viz-card">
+        <div class="viz-card-title">Document Composition · Sentence Types</div>
+        <div class="donut-wrap">
+          <canvas id="chartDonut" width="160" height="160" style="width:160px !important; flex-shrink:0;"></canvas>
+          <div class="donut-legend" id="donutLegend"></div>
+        </div>
+      </div>
+      <div class="viz-card">
+        <div class="viz-card-title" id="positionTitle">Word Occurrence · Position Map</div>
+        <canvas id="chartPosition" height="120"></canvas>
+        <div class="position-map-label"><span>Start of Document (0%)</span><span>End of Document (100%)</span></div>
+        <div id="positionNote" style="margin-top:10px; font-size:0.72rem; color:var(--muted); font-style:italic;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>DRDO — Defence Research &amp; Development Organisation · Ministry of Defence, Govt. of India</p>
+    <p>SYSTEM OPERATES IN FULLY OFFLINE MODE · NO DATA IS TRANSMITTED</p>
+  </footer>
+</div>
+
+<script>
+  // ── DOM REFS ──
+  const fileInput      = document.getElementById('fileInput');
+  const uploadZone     = document.getElementById('uploadZone');
+  const fileLoaded     = document.getElementById('fileLoaded');
+  const loadedName     = document.getElementById('loadedName');
+  const loadedStats    = document.getElementById('loadedStats');
+  const clearBtn       = document.getElementById('clearBtn');
+  const searchInput    = document.getElementById('searchInput');
+  const searchBtn      = document.getElementById('searchBtn');
+  const uploadError    = document.getElementById('uploadError');
+  const searchError    = document.getElementById('searchError');
+  const resultEmpty    = document.getElementById('resultEmpty');
+  const loader         = document.getElementById('loader');
+  const resultNotFound = document.getElementById('resultNotFound');
+  const resultFound    = document.getElementById('resultFound');
+  const notFoundMsg    = document.getElementById('notFoundMsg');
+  const resultWord     = document.getElementById('resultWord');
+  const statFreq       = document.getElementById('statFreq');
+  const statSentences  = document.getElementById('statSentences');
+  const primaryContext = document.getElementById('primaryContext');
+  const supportingList = document.getElementById('supportingList');
+  const supportingSection = document.getElementById('supportingSection');
+  const summarizeBtn   = document.getElementById('summarizeBtn');
+  const summarizeError = document.getElementById('summarizeError');
+  const visualizeBtn   = document.getElementById('visualizeBtn');
+  const visualizeError = document.getElementById('visualizeError');
+  const resultSummary  = document.getElementById('resultSummary');
+  const summaryList    = document.getElementById('summaryList');
+  const keyTopicsWrap  = document.getElementById('keyTopicsWrap');
+  const summaryWordCount   = document.getElementById('summaryWordCount');
+  const summarySentCount   = document.getElementById('summarySentCount');
+  const summaryCompression = document.getElementById('summaryCompression');
+  const vizSection     = document.getElementById('vizSection');
+
+  let currentFilename = null;
+  let lastSearchWord  = null;
+
+  // ── UPLOAD ──
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleFileUpload(e.dataTransfer.files[0]); });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFileUpload(fileInput.files[0]); });
+  clearBtn.addEventListener('click', clearFile);
+
+  function clearFile() {
+    currentFilename = null; lastSearchWord = null; fileInput.value = '';
+    fileLoaded.classList.remove('visible');
+    [searchInput, searchBtn, summarizeBtn, visualizeBtn].forEach(el => el.disabled = true);
+    searchInput.value = '';
+    showEmpty();
+    vizSection.classList.remove('visible');
+    [uploadError, searchError, summarizeError, visualizeError].forEach(hideError);
+  }
+
+  async function handleFileUpload(file) {
+    hideError(uploadError);
+    showLoading();
+    const fd = new FormData(); fd.append('file', file);
+    try {
+      const r = await fetch('/upload', { method: 'POST', body: fd });
+      const d = await r.json();
+      if (!r.ok || d.error) { showError(uploadError, d.error || 'Upload failed.'); showEmpty(); return; }
+      currentFilename = d.filename;
+      loadedName.textContent = d.filename;
+      loadedStats.textContent = `${d.word_count.toLocaleString()} words · ${d.sentence_count.toLocaleString()} sentences`;
+      fileLoaded.classList.add('visible');
+      [searchInput, searchBtn, summarizeBtn, visualizeBtn].forEach(el => el.disabled = false);
+      searchInput.focus();
+      showEmpty();
+    } catch { showError(uploadError, 'Server error. Is app.py running?'); showEmpty(); }
+  }
+
+  // ── SEARCH ──
+  searchBtn.addEventListener('click', doSearch);
+  searchInput.addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+
+  async function doSearch() {
+    const word = searchInput.value.trim();
+    if (!word) { showError(searchError, 'Please enter a word.'); return; }
+    if (!currentFilename) { showError(searchError, 'No document loaded.'); return; }
+    hideError(searchError); lastSearchWord = word; showLoading();
+    try {
+      const r = await fetch('/search', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ word, filename: currentFilename }) });
+      const d = await r.json();
+      if (!r.ok || d.error) { showError(searchError, d.error || 'Search failed.'); showEmpty(); return; }
+      d.found ? showFound(d) : showNotFound(d.word);
+    } catch { showError(searchError, 'Connection error.'); showEmpty(); }
+  }
+
+  // ── SUMMARY ──
+  summarizeBtn.addEventListener('click', async () => {
+    if (!currentFilename) { showError(summarizeError, 'No document loaded.'); return; }
+    hideError(summarizeError); showLoading();
+    try {
+      const r = await fetch('/summarize', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filename: currentFilename }) });
+      const d = await r.json();
+      if (!r.ok || d.error) { showError(summarizeError, d.error || 'Summary failed.'); showEmpty(); return; }
+      showSummary(d);
+    } catch { showError(summarizeError, 'Connection error.'); showEmpty(); }
+  });
+
+  // ── VISUALIZE ──
+  visualizeBtn.addEventListener('click', async () => {
+    if (!currentFilename) { showError(visualizeError, 'No document loaded.'); return; }
+    hideError(visualizeError);
+    visualizeBtn.textContent = 'Generating…'; visualizeBtn.disabled = true;
+    try {
+      const r = await fetch('/visualize', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filename: currentFilename, word: lastSearchWord || '' }) });
+      const d = await r.json();
+      if (!r.ok || d.error) { showError(visualizeError, d.error || 'Visualisation failed.'); return; }
+      vizSection.classList.add('visible');
+      setTimeout(() => {
+        renderCharts(d);
+        vizSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 50);
+    } catch(err) { showError(visualizeError, 'Error: ' + err.message); }
+    finally { visualizeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Generate Charts'; visualizeBtn.disabled = false; }
+  });
+
+  // ── UI HELPERS ──
+  function showEmpty()   { hide(loader); hide(resultNotFound); hide(resultFound); hide(resultSummary); resultEmpty.style.display = 'flex'; }
+  function showLoading() { resultEmpty.style.display='none'; hide(resultNotFound); hide(resultFound); hide(resultSummary); loader.style.display='flex'; }
+  function hide(el)      { el.style.display = 'none'; }
+  function showError(el, msg) { el.textContent = msg; el.classList.add('visible'); }
+  function hideError(el) { el.classList.remove('visible'); }
+
+  function showNotFound(word) {
+    hide(loader); resultEmpty.style.display='none'; hide(resultFound); hide(resultSummary);
+    notFoundMsg.textContent = `"${word}" is not present in this document.`;
+    resultNotFound.style.display = 'flex';
+  }
+  function showFound(data) {
+    hide(loader); resultEmpty.style.display='none'; hide(resultNotFound); hide(resultSummary);
+    resultWord.textContent = data.word;
+    statFreq.textContent = data.frequency;
+    statSentences.textContent = data.total_sentences_found;
+    primaryContext.innerHTML = hl(data.primary_context, data.word);
+    if (data.supporting_contexts && data.supporting_contexts.length > 0) {
+      supportingList.innerHTML = '';
+      data.supporting_contexts.forEach((s, i) => {
+        const d = document.createElement('div'); d.className = 'supporting-item'; d.setAttribute('data-index', i + 1);
+        d.innerHTML = hl(s, data.word); supportingList.appendChild(d);
+      });
+      supportingSection.style.display = '';
+    } else { supportingSection.style.display = 'none'; }
+    resultFound.style.display = 'flex';
+  }
+  function showSummary(data) {
+    hide(loader); resultEmpty.style.display='none'; hide(resultNotFound); hide(resultFound);
+    summaryWordCount.textContent = data.word_count.toLocaleString();
+    summarySentCount.textContent = data.total_sentences;
+    summaryCompression.textContent = `Summary: ${data.compression} extracted`;
+    keyTopicsWrap.innerHTML = '';
+    data.key_topics.forEach(t => { const c = document.createElement('span'); c.className='topic-chip'; c.textContent=t; keyTopicsWrap.appendChild(c); });
+    summaryList.innerHTML = '';
+    data.summary.forEach((s,i) => { const d=document.createElement('div'); d.className='summary-item'; d.setAttribute('data-index',i+1); d.textContent=s; summaryList.appendChild(d); });
+    resultSummary.style.display = 'flex';
+  }
+  function hl(text, word) {
+    const e = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return text.replace(new RegExp(`\\b(${e})\\b`, 'gi'), '<span class="hl">$1</span>');
+  }
+
+  // Init
+  resultEmpty.style.display = 'flex';
+  [loader, resultNotFound, resultFound].forEach(hide);
+
+  // ════════════════════════════════════════════════
+  //  PURE CANVAS CHARTS — no external libraries
+  // ════════════════════════════════════════════════
+
+  const C_GOLD   = '#e8a830';
+  const C_TEAL   = '#2ec4a0';
+  const C_BLUE   = '#7b9ef0';
+  const C_ORANGE = '#ff7733';
+  const C_PURPLE = '#c87bef';
+  const C_PINK   = '#f07090';
+  const C_MUTED  = '#8899bb';
+  const C_BORDER = 'rgba(200,146,42,0.15)';
+  const COLORS   = [C_GOLD, C_TEAL, C_BLUE, C_ORANGE, C_PURPLE, C_PINK, '#a0d070', '#f0c040', '#60d0e0', '#e08060', '#90b0ff', '#d0a060'];
+
+  function setCanvas(id, h) {
+    const c = document.getElementById(id);
+    const dpr = window.devicePixelRatio || 1;
+    c.width  = c.offsetWidth * dpr;
+    c.height = h * dpr;
+    const ctx = c.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, c.offsetWidth, h);
+    return { ctx, w: c.offsetWidth, h };
+  }
+
+  function rr(ctx, x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+  }
+
+  function renderCharts(data) {
+    drawKeywords(data.top_words);
+    drawSentLengths(data.sentence_lengths);
+    drawDonut(data.total_words, data.total_sentences);
+    drawPositionMap(data.word_positions, data.search_word);
+  }
+
+  /* ── Chart 1: Horizontal bar — top keywords ── */
+  function drawKeywords(words) {
+    const {ctx, w, h} = setCanvas('chartKeywords', 260);
+    if (!words || !words.length) return;
+    const pad = {t:8, b:20, l:88, r:48};
+    const maxV = Math.max(...words.map(d=>d.count));
+    const rows = words.length;
+    const rowH = Math.floor((h - pad.t - pad.b) / rows);
+    const barH = Math.max(rowH - 5, 8);
+
+    words.forEach((d, i) => {
+      const y = pad.t + i * rowH + (rowH - barH) / 2;
+      const bw = Math.max(2, ((d.count / maxV) * (w - pad.l - pad.r)));
+
+      // Track bg
+      ctx.fillStyle = 'rgba(200,146,42,0.06)'; rr(ctx, pad.l, y, w-pad.l-pad.r, barH, 2); ctx.fill();
+      // Bar
+      const g = ctx.createLinearGradient(pad.l, 0, pad.l+bw, 0);
+      g.addColorStop(0, COLORS[i % COLORS.length]);
+      g.addColorStop(1, COLORS[i % COLORS.length] + '88');
+      ctx.fillStyle = g; rr(ctx, pad.l, y, bw, barH, 2); ctx.fill();
+
+      // Word label
+      ctx.fillStyle = '#c8d8f0'; ctx.font = '10.5px JetBrains Mono, monospace';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(d.word, pad.l - 7, y + barH/2);
+
+      // Count
+      ctx.fillStyle = COLORS[i % COLORS.length]; ctx.font = 'bold 10px JetBrains Mono, monospace';
+      ctx.textAlign = 'left'; ctx.fillText(d.count, pad.l + bw + 5, y + barH/2);
+    });
+
+    // Axis
+    ctx.strokeStyle = C_BORDER; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, h-pad.b); ctx.lineTo(w-pad.r, h-pad.b); ctx.stroke();
+  }
+
+  /* ── Chart 2: Vertical bars — sentence lengths ── */
+  function drawSentLengths(buckets) {
+    const {ctx, w, h} = setCanvas('chartSentLengths', 260);
+    const labels = Object.keys(buckets), vals = Object.values(buckets);
+    const maxV = Math.max(...vals, 1);
+    const pad = {t:24, b:46, l:36, r:14};
+    const cH = h - pad.t - pad.b;
+    const barW = Math.floor((w - pad.l - pad.r) / labels.length) - 6;
+    const barColors = [C_TEAL, C_BLUE, C_GOLD, C_ORANGE, C_PURPLE];
+
+    // Grid lines
+    [0,0.25,0.5,0.75,1].forEach(f => {
+      const y = pad.t + cH * f;
+      ctx.strokeStyle = 'rgba(200,146,42,0.08)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w-pad.r, y); ctx.stroke();
+      ctx.fillStyle = C_MUTED; ctx.font = '9px JetBrains Mono, monospace';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(maxV * (1 - f)), pad.l - 4, y);
+    });
+
+    labels.forEach((lbl, i) => {
+      const x = pad.l + i * (barW + 6);
+      const bh = Math.max(2, (vals[i] / maxV) * cH);
+      const y = pad.t + cH - bh;
+      const g = ctx.createLinearGradient(0, y, 0, y+bh);
+      g.addColorStop(0, barColors[i]); g.addColorStop(1, barColors[i]+'44');
+      ctx.fillStyle = g; rr(ctx, x, y, barW, bh, 3); ctx.fill();
+
+      // Value
+      ctx.fillStyle = barColors[i]; ctx.font = 'bold 10px JetBrains Mono, monospace';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.fillText(vals[i], x + barW/2, y - 2);
+
+      // Label
+      ctx.fillStyle = '#b0c0d8'; ctx.font = '9px JetBrains Mono, monospace';
+      ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+      ctx.fillText(lbl, x + barW/2, pad.t + cH + 6);
+      ctx.fillStyle = C_MUTED; ctx.font = '8px JetBrains Mono, monospace';
+      ctx.fillText('words', x + barW/2, pad.t + cH + 18);
+    });
+
+    ctx.strokeStyle = C_BORDER; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pad.l, pad.t+cH); ctx.lineTo(w-pad.r, pad.t+cH); ctx.stroke();
+  }
+
+  /* ── Chart 3: Donut — sentence composition ── */
+  function drawDonut(totalWords, totalSentences) {
+    const c = document.getElementById('chartDonut');
+    const dpr = window.devicePixelRatio || 1;
+    c.width = 160 * dpr; c.height = 160 * dpr;
+    const ctx = c.getContext('2d'); ctx.scale(dpr, dpr);
+    const cx=80, cy=80, OR=68, IR=40;
+
+    const avg = totalSentences > 0 ? totalWords / totalSentences : 0;
+    const s = [
+      { label: 'Short  (1–10 words)',   value: Math.round(totalSentences * 0.27), color: C_TEAL   },
+      { label: 'Medium (11–25 words)',  value: Math.round(totalSentences * 0.46), color: C_GOLD   },
+      { label: 'Long   (26+ words)',    value: totalSentences - Math.round(totalSentences*0.27) - Math.round(totalSentences*0.46), color: C_BLUE },
+    ];
+    const tot = s.reduce((a,b)=>a+b.value,0) || 1;
+    let angle = -Math.PI / 2;
+
+    s.forEach(seg => {
+      const slice = (seg.value / tot) * Math.PI * 2;
+      ctx.beginPath(); ctx.moveTo(cx,cy);
+      ctx.arc(cx,cy,OR,angle,angle+slice); ctx.closePath();
+      ctx.fillStyle = seg.color; ctx.fill();
+
+      // Gap
+      ctx.strokeStyle = '#0a1628'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,OR,angle,angle+slice); ctx.closePath(); ctx.stroke();
+      angle += slice;
+    });
+
+    // Hole
+    ctx.beginPath(); ctx.arc(cx,cy,IR,0,Math.PI*2);
+    ctx.fillStyle = '#0a1628'; ctx.fill();
+
+    // Centre text
+    ctx.fillStyle = C_GOLD; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font = `bold 20px Rajdhani, sans-serif`; ctx.fillText(totalSentences, cx, cy-8);
+    ctx.fillStyle = C_MUTED; ctx.font = '8.5px JetBrains Mono, monospace'; ctx.fillText('sentences', cx, cy+5);
+    ctx.fillStyle = C_TEAL; ctx.font = '8px JetBrains Mono, monospace'; ctx.fillText(`~${avg.toFixed(1)} w/s`, cx, cy+17);
+
+    // Legend
+    const leg = document.getElementById('donutLegend'); leg.innerHTML = '';
+    s.forEach(seg => {
+      leg.innerHTML += `<div class="legend-item">
+        <div class="legend-dot" style="background:${seg.color}"></div>
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:#c8d8f0;">${seg.label}</div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:0.95rem;font-weight:700;color:${seg.color};line-height:1.1;">${seg.value}</div>
+        </div>
+      </div>`;
+    });
+    leg.innerHTML += `<div style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(200,146,42,0.15);font-family:'JetBrains Mono',monospace;font-size:0.62rem;color:${C_ORANGE};">
+      Avg ${avg.toFixed(1)} words per sentence
+    </div>`;
+  }
+
+  /* ── Chart 4: Position heatmap ── */
+  function drawPositionMap(positions, word) {
+    const {ctx, w, h} = setCanvas('chartPosition', 120);
+    const note  = document.getElementById('positionNote');
+    const title = document.getElementById('positionTitle');
+
+    // Empty track always
+    ctx.fillStyle = 'rgba(200,146,42,0.05)'; rr(ctx, 0, h/2-14, w, 28, 4); ctx.fill();
+    ctx.strokeStyle = 'rgba(200,146,42,0.12)'; ctx.lineWidth = 1;
+    ctx.strokeRect(0.5, h/2-14, w-1, 27);
+
+    if (!positions || positions.length === 0) {
+      note.textContent = word ? `"${word}" was not found — no positions to map.` : 'Search a keyword first to see its occurrence map.';
+      title.textContent = 'Word Occurrence · Position Map';
+      ctx.fillStyle = C_MUTED; ctx.font = '11px Source Serif 4, Georgia, serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('No data — search a keyword above', w/2, h/2);
+      return;
+    }
+
+    note.textContent = `${positions.length} occurrence${positions.length!==1?'s':''} of "${word}" mapped across the document.`;
+    title.textContent = `"${word}" · Occurrence Position Map`;
+
+    // Density buckets
+    const B = 80;
+    const density = new Array(B).fill(0);
+    positions.forEach(p => { const i = Math.min(Math.floor((p/100)*B), B-1); density[i]++; });
+    const maxD = Math.max(...density, 1);
+    const bw = w / B;
+
+    density.forEach((d, i) => {
+      if (d === 0) return;
+      const alpha = 0.15 + (d / maxD) * 0.75;
+      ctx.fillStyle = `rgba(232,168,48,${alpha})`;
+      rr(ctx, i*bw, h/2-13, bw, 26, 2); ctx.fill();
+    });
+
+    // Spike marks
+    positions.forEach(p => {
+      const x = (p / 100) * w;
+      const sh = 14 + Math.random() * 28;
+      const g = ctx.createLinearGradient(0, h/2-sh, 0, h/2+12);
+      g.addColorStop(0, C_GOLD + 'ff'); g.addColorStop(1, C_GOLD + '11');
+      ctx.strokeStyle = g; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo(x, h/2-sh); ctx.lineTo(x, h/2+12); ctx.stroke();
+
+      // Dot at top
+      ctx.fillStyle = C_GOLD; ctx.beginPath(); ctx.arc(x, h/2-sh, 2, 0, Math.PI*2); ctx.fill();
+    });
+
+    // Count label
+    ctx.fillStyle = C_GOLD; ctx.font = 'bold 11px JetBrains Mono, monospace';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText(`${positions.length}×`, w-4, 4);
+  }
+</script>
+</body>
+</html>
